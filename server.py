@@ -1,5 +1,5 @@
-#  coding: utf-8 
 import socketserver
+import os
 
 # Copyright 2013 Abram Hindle, Eddie Antonio Santos
 # 
@@ -26,13 +26,65 @@ import socketserver
 
 # try: curl -v -X GET http://127.0.0.1:8080/
 
+def getPath(data):
+    _ = str(data, 'utf-8').split(' ')
+    return _[1]
+
+def getMethod(data):
+    _ = str(data, 'utf-8').split(' ')
+    return _[0]
+
+def readFile(file):
+    with open(file, 'r') as f:
+        readContent = f.read()
+        f.close()
+        return readContent
 
 class MyWebServer(socketserver.BaseRequestHandler):
     
     def handle(self):
         self.data = self.request.recv(1024).strip()
-        print ("Got a request of: %s\n" % self.data)
-        self.request.sendall(bytearray("OK",'utf-8'))
+        path = getPath(self.data)
+        method = getMethod(self.data)
+
+        cssContent = None
+        deepCssContent = None
+        htmlContent = None
+        forwardedPage = None
+        #handle files in directory
+        #if any file is loaded, it will be stored in a variable and sent back as a response
+        print(path)
+        print(method)
+
+        if path == "/base.css":
+            cssContent = readFile(os.getcwd()+"/www/base.css")
+        elif path == "/deep/deep.css":
+            deepCssContent = readFile(os.getcwd()+"/www/deep/deep.css")
+        elif path == "/index.html" or path == "/":
+            cssContent = readFile(os.getcwd()+'/www/base.css')
+            htmlContent = readFile(os.getcwd()+'/www/index.html')
+        elif path == "/deep/" or path == "/deep/index.html":
+            cssContent = readFile(os.getcwd()+'/www/deep/deep.css')
+            htmlContent = readFile(os.getcwd()+'/www/deep/index.html')
+
+        if method != "GET":
+            self.request.sendall(bytearray("HTTP/1.1 405 Method Not Allowed\r\n", 'utf-8'))
+        elif os.path.isdir("./www" + path) and path[-1] != "/":
+            self.request.sendall(bytearray("HTTP/1.1 301 Moved Permanently\r\n", 'utf-8'))
+            forwardedPage = path + "/"
+            self.request.sendall(bytearray("Location: %s\r\n" % forwardedPage, 'utf-8'))
+        elif htmlContent != None:
+            self.request.sendall(bytearray(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"+htmlContent+"\r\n", 'utf-8'))
+        elif cssContent != None:
+            self.request.sendall(bytearray(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/css; charset=utf-8\r\n\r\n"+cssContent+"\r\n", 'utf-8'))
+        elif deepCssContent != None:
+            self.request.sendall(bytearray(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/css; charset=utf-8\r\n\r\n"+deepCssContent+"\r\n", 'utf-8'))
+        else:
+            self.request.sendall(
+                bytearray("HTTP/1.1 404 Not Found\r\nConnection: close\r\n", 'utf-8'))
 
 if __name__ == "__main__":
     HOST, PORT = "localhost", 8080
